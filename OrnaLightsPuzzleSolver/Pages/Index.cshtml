@@ -1,0 +1,80 @@
+﻿@page
+@model OrnaLightsPuzzleSolver.Launch.Pages.IndexModel
+@{
+    ViewData["Title"] = "File Upload Page";
+}
+
+<div class="text-center">
+    <text>Upload a screenshot of the puzzle and follow the solution below</text>
+    <div>
+        <form enctype="multipart/form-data" method="post">
+            <dl>
+                <dt>
+                    <label asp-for="FormFile"/>
+                </dt>
+                <dd>
+                    <input asp-for="FormFile" type="file" required="true"/>
+                    <span asp-validation-for="FormFile"/>
+                </dd>
+            </dl>
+            <input asp-page-handler="OnPostAsync" class="btn" type="submit" value="Upload"/>
+        </form>
+        <text>Max file size: @Model.FileSizeLimit bytes (@Model.FileSizeLimitInMb mb)</text>
+    </div>
+
+    @if (Model.OriginalLightsOutBoard != null)
+    {
+        <div class="text-center">
+            <text>This is what was parsed. O means the light was on.</text>
+            <table>
+                @for (int i = 0; i < Model.OriginalLightsOutBoard.Size().Rows; i++)
+                {
+                    <tr>
+                        @for (int j=0; j < Model.OriginalLightsOutBoard.Size().Columns; j++)
+                        {
+                            var cell = Model.OriginalLightsOutBoard[i,j];
+                            <td>
+                                @if (cell == 0)
+                                {
+                                    <label>O</label>
+                                }
+                                else
+                                {
+                                    <label>X</label>
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+            </table>
+        </div>
+    }
+
+    @if (Model.Solution != null)
+    {
+        <div class="text-center">
+            <text>Click on the cells that have an O</text>
+            <table>
+                @foreach (var row in Model.Solution.Interactions)
+                {
+                    <tr>
+                        @foreach (var cell in row)
+                        {
+                            <td>
+                                @if (cell)
+                                {
+                                    <label>O</label>
+                                }
+                                else
+                                {
+                                    <label>X</label>
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+            </table>
+        </div>
+    }
+</div>
+
