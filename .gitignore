@@ -361,3 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/OrnaLightsPuzzleSolver/Properties/ServiceDependencies/ornalights - Web Deploy/profile.arm.json
+/OrnaLightsPuzzleSolver/Properties/ServiceDependencies/OrnaLightsPuzzleSolverLaunch20230416160859 - Web Deploy/profile.arm.json
+/OrnaLightsPuzzleSolver/Properties/PublishProfiles/ornalights - Web Deploy.pubxml
+/OrnaLightsPuzzleSolver/Properties/PublishProfiles/OrnaLightsPuzzleSolverLaunch20230416160859 - Web Deploy.pubxml
