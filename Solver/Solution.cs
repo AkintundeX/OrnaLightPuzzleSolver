@@ -66,7 +66,7 @@ public sealed class Solution
 
         foreach(var row in Interactions)
         {
-            sb.Append($"|{string.Join(", ", row)}|{Environment.NewLine}");
+            sb.Append($"|{string.Join(", ", row.Select(item => item ? "O" : "X"))}|{Environment.NewLine}");
         }
 
         return sb.ToString();

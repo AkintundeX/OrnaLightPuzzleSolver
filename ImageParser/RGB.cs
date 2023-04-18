@@ -10,7 +10,8 @@ public struct RGB
 {
     private const int MINIMUM_COLOR_VALUE = 0;
     private const int MAXIMUM_COLOR_VALUE = 255;
-    private const int ALLOWED_VARIANCE = 1;
+    private const int ALLOWED_VARIANCE = 2;
+    private const double PERCENTAGE_VARIANCE = 0.15;
     public int Red { get; init; }
     public int Green { get; init; }
     public int Blue { get; init; }
@@ -71,6 +72,24 @@ public struct RGB
     /// <returns></returns>
     public static bool RoughlyEqual(RGB lhs, RGB rhs)
     {
+        //var rVariance = (int)(lhs.Red * PERCENTAGE_VARIANCE);
+        //var rDiff = lhs.Red - rhs.Red;
+        //if (Math.Abs(rDiff) > rVariance)
+        //    return false;
+
+        //var gVariance = (int)(lhs.Green * PERCENTAGE_VARIANCE);
+        //var gDiff = lhs.Green - rhs.Green;
+        //if (Math.Abs(gDiff) > gVariance)
+        //    return false;
+
+        //var bVariance = (int)(lhs.Blue * PERCENTAGE_VARIANCE);
+        //var bDiff = lhs.Blue - rhs.Blue;
+        //if (Math.Abs(bDiff) > bVariance)
+        //    return false;
+
+        //return true;
+
+
         var rDiff = lhs.Red - rhs.Red;
         if (Math.Abs(rDiff) > ALLOWED_VARIANCE)
             return false;

@@ -98,6 +98,6 @@ public sealed class BoardRow
 
     public override string ToString()
     {
-        return string.Join(", ", _columns);
+        return string.Join(", ", _columns.Select(item => item == 1 ? "X" : "O"));
     }
 }

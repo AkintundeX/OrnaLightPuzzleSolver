@@ -22,7 +22,7 @@ public class ImageScanner
     private readonly int _endAtRow;
     private readonly int _endAtCol;
     private const int INCORRECT_COLOR_THRESHOLD = 2;
-    private const int VALIDATION_REQUIREMENT = 40;
+    private const int VALIDATION_REQUIREMENT = 10;
 
     private const int PIXEL_STEP = 2;
     private const int MAXIMUM_BOARD_SIZE = 6;
@@ -38,10 +38,10 @@ public class ImageScanner
 
         var width = _image.Width;
         var height = _image.Height;
-        _startAtRow = (int)(height * VERTICAL_RESERVED_SIZE);
-        _endAtRow = height - _startAtRow;
-        _startAtCol = (int)(width * HORIZONTAL_RESERVED_SIZE);
-        _endAtCol = width - _startAtCol;
+        _startAtRow = 20;// (int)(height * VERTICAL_RESERVED_SIZE);
+        _endAtRow = height - _startAtRow - 1;
+        _startAtCol = 20; // (int)(width * HORIZONTAL_RESERVED_SIZE);
+        _endAtCol = width - _startAtCol - 1;
     }
 
     /// <summary>
@@ -59,52 +59,90 @@ public class ImageScanner
     /// <returns></returns>
     public OneOf<LightsOutBoard, CouldNotParseBoard> ProcessImage()
     {
-        // Don't know the dimensions yet so no array for you
-        var boardRows = new List<List<int>>(MAXIMUM_BOARD_SIZE);
-
         // First, we purely need to worry about finding the first tile.
-        int firstTileX = -1, firstTileY = -1;
-        var extColor = TileColors.BorderExterior;
-        var highlightcolor = TileColors.BorderHighlight;
-        bool firstTileFound = false;
+        int firstTileX = int.MaxValue, firstTileY = 0;
+        // gotta go row by row unfortunately
+        // Need to find several potential start points and then pick the small x/y
 
-        for (int column = _startAtCol; column < _endAtCol && !firstTileFound; column += PIXEL_STEP)
+        bool firstTileFound = false;
+        var yCoordinates = new List<int>();
+        bool foundY = false;
+        for (int row = 0; row < _endAtRow; row += PIXEL_STEP)
         {
-            for (int row = _startAtRow; row < _endAtCol && !firstTileFound; row += PIXEL_STEP)
+            for (int column = 0; column < _endAtCol; column += PIXEL_STEP)
             {
                 var pixel = _image[row, column];
                 var pixelColor = new RGB((int)pixel.Red, (int)pixel.Green, (int)pixel.Blue);
 
-                if (RGB.RoughlyEqual(pixelColor, extColor) ||
-                    RGB.RoughlyEqual(pixelColor, highlightcolor))
+                if (TileColors.IsTileInterior(pixelColor))
                 {
-                    firstTileFound = ValidateNextTilesAreInsideGlyph(column, row);
+                    firstTileFound = true;
+                    const int _validation_count = 5;
+                    for (int i = -_validation_count; i <= _validation_count; i++)
+                    {
+                        for (int j = -_validation_count; j <= _validation_count; j++)
+                        {
+                            var x = Math.Min(_image.Width - 1, Math.Max(0, column + (PIXEL_STEP * i)));
+                            var y = Math.Min(_image.Height - 1, Math.Max(0, row + (PIXEL_STEP * j)));
+                            var otherPixel = _image[y, x];
+                            var otherPixelColor = new RGB(otherPixel.Red, otherPixel.Green, otherPixel.Blue);
+                            firstTileFound &= TileColors.IsTileInterior(otherPixelColor);
+
+                            if (!firstTileFound)
+                                break;
+                        }
+                        if (!firstTileFound)
+                            break;
+                    }
                     if (firstTileFound)
                     {
-                        firstTileX = column;
-                        firstTileY = row;
+                        firstTileX = Math.Min(firstTileX, column);
+                        yCoordinates.Add(row);
+                        firstTileY = Math.Max(firstTileY, row);
                     }
                 }
             }
         }
 
-        if (!firstTileFound)
+        if (firstTileX == int.MaxValue || !yCoordinates.Any())
         {
             return new CouldNotParseBoard();
         }
 
+        yCoordinates.Sort();
+        int cutOff = 1;
+        int samples = 0;
+
+        for (; cutOff < yCoordinates.Count; cutOff++)
+        {
+            if (yCoordinates[cutOff] - yCoordinates[cutOff - 1] > PIXEL_STEP * 6)
+            {
+                if (samples > 10)
+                {
+                    break;
+                }
+            }
+            else
+            {
+                samples++;
+            }
+        }
+
+        var chosenYIdx = yCoordinates[(cutOff - 1) / 2];
+        firstTileY = chosenYIdx;
+
         int gap = 0;
         bool insidePriorTile = true;
         int incorrectColorsEncountered = 0;
-        bool secondTileFound = false;
         // This will give an approximate distance between tiles horizontally. But based off the images I used, the vertical and horizontal gaps are equivalent. Until proven otherwise, the gap value will be shared but the methods will accept two in case this code needs amending
-        for (int column = firstTileX; column < _endAtCol && !secondTileFound; column += PIXEL_STEP)
+        for (int column = firstTileX; column < _endAtCol; column += PIXEL_STEP)
         {
+            bool secondTileFound = false;
             var pixel = _image[firstTileY, column];
             var tileRgb = new RGB((int)pixel.Red, (int)pixel.Green, (int)pixel.Blue);
             if (insidePriorTile)
             {
-                if (!TileColors.AllGlyphColors.Any(rgb => RGB.RoughlyEqual(rgb, tileRgb)))
+                if (!TileColors.IsAnyGlyphColor(tileRgb))
                 {
                     incorrectColorsEncountered++;
                 }
@@ -120,19 +158,20 @@ public class ImageScanner
             }
             else
             {
-                if (RGB.RoughlyEqual(tileRgb, extColor) || RGB.RoughlyEqual(tileRgb, highlightcolor))
+                if (TileColors.IsTileInterior(tileRgb))
                 {
                     secondTileFound = ValidateNextTilesAreInsideGlyph(column, firstTileY);
 
                     if (secondTileFound)
                     {
                         gap = column - firstTileX;
+                        break;
                     }
                 }
             }
         }
 
-        if (!secondTileFound)
+        if (gap == 0)
         {
             return new CouldNotParseBoard();
         }
@@ -140,94 +179,44 @@ public class ImageScanner
         return PopulateBoard(firstTileX, firstTileY, gap, gap);
     }
 
-    private bool ValidateTile(int column, int row)
-    {
-        // At this point, we should be at the left side of the tile. We may not be at the corner, however.
-        // First, lets scan across to find a row that includes the Exterior color, Interior Color, Tile Color, Glyph Exterior and Glyph Interior in a row.
-        // We will have to scan down AND up, as we are not guaranteed to be at any specific corner.
-
-        List<RGB> colorsFound = new();
-        var firstPixelColor = _image[row, column];
-        var firstPixelRgb = new RGB(firstPixelColor.Red, firstPixelColor.Green, firstPixelColor.Blue);
-        bool firstPixelOn;
-
-        if (RGB.RoughlyEqual(firstPixelRgb, TileColors.BorderExterior))
-        {
-            firstPixelOn = false;
-        }
-        else if (RGB.RoughlyEqual(firstPixelRgb, TileColors.GlyphExteriorHighlight))
-        {
-            firstPixelOn = true;
-        }
-        else { return false; }
-
-        // 1000 is just a sanity check, this loop should always break well before then.
-        for (int offset = 0; offset < 1000; offset += PIXEL_STEP)
-        {
-            var pixel = _image[row, column + offset];
-            var tileRgb = new RGB(pixel.Red, pixel.Green, pixel.Blue);
-
-            if (colorsFound.Count == 0 || colorsFound.Last() != tileRgb)
-                colorsFound.Add(tileRgb);
-
-            if (colorsFound.Count > 4 && RGB.RoughlyEqual(tileRgb, TileColors.GlyphInterior))
-            {
-                // To validate that this is a tile, we will check the previous set of colors.
-                if (RGB.RoughlyEqual(colorsFound[colorsFound.Count - 1], TileColors.GlyphExterior) &&
-                    RGB.RoughlyEqual(colorsFound[colorsFound.Count - 2], TileColors.TileInterior) &&
-                    RGB.RoughlyEqual(colorsFound[colorsFound.Count - 3], TileColors.BorderInterior) &&
-                    RGB.RoughlyEqual(colorsFound[colorsFound.Count - 4], TileColors.BorderExterior))
-                {
-                    // This is a valid horizontal row with all the colors in the order we want. If we're looking for a tile that is off.
-                    if (firstPixelOn)
-                        break;
-                }
-            }
-        }
-
-        return true;
-    }
-
     private bool ValidateNextTilesAreInsideGlyph(int column, int row, int steps = VALIDATION_REQUIREMENT)
     {
+        var foundColors = new List<RGB>();
         for (int i = 1; i <= steps; i++)
         {
-            var columnToCheck = Math.Min(column + (PIXEL_STEP * i), _image.Width);
+            var columnToCheck = Math.Min(column + (PIXEL_STEP * i), _image.Width - 1);
             // Since the color is found, sample a few pixels to validate
             var nextPixel = _image[row, columnToCheck];
             var nextRgb = new RGB((int)nextPixel.Red, (int)nextPixel.Green, (int)nextPixel.Blue);
-            if (!TileColors.AllGlyphColors.Any(tileColor => RGB.RoughlyEqual(tileColor, nextRgb)))
+            if (TileColors.IsAnyGlyphColor(nextRgb) && (!foundColors.Any() || foundColors.Last() != nextRgb))
+            {
+                foundColors.Add(nextRgb);
+            }
+            if (!TileColors.IsAnyGlyphColor(nextRgb))
             {
                 return false;
             }
         }
 
-        return true;
-    }
-
-    private bool ValidateNextTilesAreNotInsideGlyph(int column, int row, int steps = 4)
-    {
-        for (int i = 1; i <= steps; i++)
+        if (foundColors.Count == 1 && (TileColors.IsBorderExterior(foundColors.First()) || TileColors.IsBorderInterior(foundColors.First())))
         {
-            var columnToCheck = Math.Min(column + (PIXEL_STEP * i), _image.Width);
-            // Since the color is found, sample a few pixels to validate
-            var nextPixel = _image[row, columnToCheck];
-            var nextRgb = new RGB((int)nextPixel.Red, (int)nextPixel.Green, (int)nextPixel.Blue);
-            if (TileColors.AllGlyphColors.Any(tileColor => RGB.RoughlyEqual(tileColor, nextRgb)))
-            {
-                return false;
-            }
+            return false;
         }
-
-        return true;
+        else if (foundColors.Count == 2 && foundColors.Any(rgb => TileColors.IsBorderExterior(rgb)) && foundColors.Any(rgb => TileColors.IsBorderInterior(rgb)))
+        {
+            return false;
+        }
+        return foundColors.Any();
     }
 
     private LightsOutBoard PopulateBoard(int startX, int startY, int gapX, int gapY)
     {
         var rows = new List<BoardRow>(MAXIMUM_BOARD_SIZE);
 
+        int glyphs = int.MaxValue;
+
         // Scan for the next row vertically, then populate it
-        for (int row = startY; row < _endAtRow; row += PIXEL_STEP)
+        for (int row = startY; row < _endAtRow && rows.Count < glyphs; row += PIXEL_STEP)
         {
             // Allow a scan of up to the next 10% of the gap to see if we've coun
             var maxOffset = (int)(gapX * 0.1d);
@@ -240,8 +229,17 @@ public class ImageScanner
 
                 if (valid)
                 {
-                    rows.Add(PopulateRow(x, row, gX));
-                    row = startY + (gapY * rows.Count) - PIXEL_STEP;
+                    var rowToAdd = PopulateRow(x, row, gX);
+                    if (rowToAdd.Size >= 4 && rowToAdd.Size <= 6)
+                    {
+                        rows.Add(rowToAdd);
+                        row = startY + (gapY * rows.Count) - PIXEL_STEP;
+
+                        if (glyphs == int.MaxValue)
+                        {
+                            glyphs = rowToAdd.Size;
+                        }
+                    }
                     break;
                 }
             }
@@ -253,76 +251,54 @@ public class ImageScanner
     private BoardRow PopulateRow(int startX, int yPos, int gapX)
     {
         var tileStates = new List<int>(MAXIMUM_BOARD_SIZE);
-        bool insidePriorGlyph = false;
-        // The base size of a tile is about 128x128, including their transparent space. The gap (at base size) appears to be 24 pixels, but gapX is the distance from the leftmost side of the first tile to the first occurance of the exterior/highlight of the next one, and their irregular shape means we can not rely on that value. 24 is about 19% of 128, so by cutting off ~10%, we guarantee that regardless of scaling, we are cleanly outside the first tile without having entered the next one. This threshold could likely be increased to 15%, or I could be a good programmer and just check the prior pixels once a void space is entered. 10% should guarantee that regardless of the scaling we stay outside the next glyph
-        gapX = (int)(gapX * 0.9);
 
         for (int column = startX; column < _endAtCol && (tileStates.Count < MAXIMUM_BOARD_SIZE); column += PIXEL_STEP)
         {
             // If we fell into a gap, the glyph shape didn't quite line up with the previous. This isn't an error.
-            var foundNextGlyph = ValidateNextTilesAreInsideGlyph(column, yPos);
 
-            if (foundNextGlyph && !insidePriorGlyph)
+            List<RGB> colorsFound = new();
+            for (int columnOffset = 0; columnOffset < gapX; columnOffset += PIXEL_STEP)
             {
-                List<RGB> colorsFound = new();
-                for (int columnOffset = 0; columnOffset < gapX; columnOffset += PIXEL_STEP)
-                {
-                    var tilePixel = _image[yPos, column + columnOffset];
-                    var tileRgb = new RGB((int)tilePixel.Red, (int)tilePixel.Green, (int)tilePixel.Blue);
-
-                    if (colorsFound.Count == 0 || !RGB.RoughlyEqual(tileRgb, colorsFound.Last()))
-                    {
-                        colorsFound.Add(tileRgb);
-                    }
-                }
-
-                int tileState = 1;
-
-                // To determine the the tile state, we just need to see if some colors occurred consecutively
-                // It could be ExtHighlight -> BorderExt || BorderInt
-                // BorderInt -> ExtHighlight
-                // BorderExt -> ExtHighlight
-                for (int i = 0; i < colorsFound.Count - 1; i++)
-                {
-                    var nextRgb = colorsFound[i + 1];
-                    if (RGB.RoughlyEqual(colorsFound[i], TileColors.GlyphExteriorHighlight))
-                    {
-                        if (RGB.RoughlyEqual(nextRgb, TileColors.BorderInterior) ||
-                            RGB.RoughlyEqual(nextRgb, TileColors.BorderExterior))
-                        {
-                            tileState = 0;
-                            break;
-                        }
-                    }
-                    if (RGB.RoughlyEqual(colorsFound[i], TileColors.BorderInterior))
-                    {
-                        if (RGB.RoughlyEqual(nextRgb, TileColors.BorderHighlight))
-                        {
-                            tileState = 0;
-                            break;
-                        }
-                    }
-                    if (RGB.RoughlyEqual(colorsFound[i], TileColors.BorderExterior))
-                    {
-                        if (RGB.RoughlyEqual(nextRgb, TileColors.BorderHighlight))
-                        {
-                            tileState = 0;
-                            break;
-                        }
-                    }
-                }
-
-                tileStates.Add(tileState);
-                insidePriorGlyph = true;
-            }
-            else if (insidePriorGlyph)
-            {
-                var tilePixel = _image[yPos, column];
+                if (column + columnOffset > _image.Width - 1)
+                    break;
+                
+                var tilePixel = _image[yPos, column + columnOffset];
                 var tileRgb = new RGB((int)tilePixel.Red, (int)tilePixel.Green, (int)tilePixel.Blue);
-                insidePriorGlyph = TileColors.AllGlyphColors.Any(tileColor => 
-                                        RGB.RoughlyEqual(tileColor, tileRgb)) &&
-                                        ValidateNextTilesAreInsideGlyph(column, yPos, 4);
+
+                if (!TileColors.IsAnyGlyphColor(tileRgb))
+                {
+                    break;
+                }
+
+                if (colorsFound.Count == 0 || !RGB.RoughlyEqual(tileRgb, colorsFound.Last()))
+                {
+                    colorsFound.Add(tileRgb);
+                }
             }
+
+            if (!colorsFound.Any())
+            {
+                continue;
+            }
+
+            int tileState = 1;
+
+            var highlightColors = colorsFound.Any(rgb => TileColors.IsAnyHighlightColor(rgb));
+
+            if (highlightColors)
+            {
+                int highlightsFound = 0;
+                highlightsFound += colorsFound.Any(rgb => TileColors.IsBorderHighlight(rgb)) ? 1 : 0;
+                highlightsFound += colorsFound.Any(rgb => TileColors.IsGlyphCornerHighlight(rgb)) ? 1 : 0;
+                highlightsFound += colorsFound.Any(rgb => TileColors.IsGlyphExteriorHighlight(rgb)) ? 1 : 0;
+                highlightsFound += colorsFound.Any(rgb => TileColors.IsGlyphInteriorHighlight(rgb)) ? 1 : 0;
+
+                if (highlightsFound > 1)
+                    tileState = 0;
+            }
+
+            tileStates.Add(tileState);
+            column = startX + (gapX * tileStates.Count) - PIXEL_STEP;
         }
 
         return new BoardRow(tileStates.ToArray());

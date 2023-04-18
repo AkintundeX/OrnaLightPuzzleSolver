@@ -75,6 +75,46 @@ public class ParserTests
                 for (int column = 0; column < 5; column++)
                 {
                     Console.WriteLine($"{row} {column}");
+                    Assert.That(expectedBoard[row, column], Is.EqualTo(board[row, column]), $"{row} {column} expected {expectedBoard[row,column]} actual {board[row,column]}");
+                }
+            }
+        },
+        couldNotParse =>
+        {
+            Assert.Fail("Failed to parse image");
+        });
+    }
+
+    [Test]
+    public void CanParseFiveByFiveImageFromAetheric()
+    {
+        var file = new Image<Bgr, byte>("./TestImages/AethericFiveByFive.png");
+
+        var parser = new ImageScanner(file);
+
+        var processResult = parser.ProcessImage();
+
+        processResult.Switch(board =>
+        {
+            var (rows, columns) = board.Size();
+
+            Assert.That(rows, Is.EqualTo(5));
+            Assert.That(columns, Is.EqualTo(5));
+
+            var expectedRows = new BoardRow[5];
+            expectedRows[0] = new BoardRow(new int[] { 1, 0, 1, 1, 0 });
+            expectedRows[1] = new BoardRow(new int[] { 1, 1, 1, 0, 1 });
+            expectedRows[2] = new BoardRow(new int[] { 0, 0, 0, 0, 0 });
+            expectedRows[3] = new BoardRow(new int[] { 1, 1, 0, 0, 0 });
+            expectedRows[4] = new BoardRow(new int[] { 0, 0, 0, 0, 0 });
+
+            var expectedBoard = new LightsOutBoard(expectedRows);
+
+            for (int row = 0; row < 5; row++)
+            {
+                for (int column = 0; column < 5; column++)
+                {
+                    Console.WriteLine($"{row} {column}");
                     Assert.That(expectedBoard[row, column], Is.EqualTo(board[row, column]));
                 }
             }
