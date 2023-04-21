@@ -307,22 +307,3 @@ public class ImageScanner
 
 public struct CouldNotParseBoard
 { }
-
-public struct TileValidationResult
-{
-    public bool IsGlyph { get; init; }
-
-    public bool IsOn { get; init; }
-
-    public int X { get; init; }
-
-    public int Y { get; init; }
-
-    public TileValidationResult(bool isGlyph, bool isOn, int x, int y)
-    {
-        IsGlyph = isGlyph;
-        IsOn = isOn;
-        X = x; 
-        Y = y;
-    }
-}

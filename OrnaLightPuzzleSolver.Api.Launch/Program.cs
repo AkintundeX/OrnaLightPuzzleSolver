@@ -9,7 +9,10 @@ using System.Text;
 string[] ALLOWED_EXTENSIONS = new string[] { ".png", ".jpg", ".jpeg", ".bmp" };
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddRateLimiter(_ =>
+var services = builder.Services;
+var config = builder.Configuration;
+
+services.AddRateLimiter(_ =>
 {
     _.AddFixedWindowLimiter("upload", cfg =>
     {
@@ -19,7 +22,10 @@ builder.Services.AddRateLimiter(_ =>
     });
 });
 
-var fileSizeLimit = builder.Configuration.GetValue<long?>("FileSizeLimit") ?? (1024 << 10);
+services.RegisterInfrastructureServices();
+services.RegisterRepositoryServices();
+
+var fileSizeLimit = config.GetValue<long?>("FileSizeLimit") ?? (1024 << 10);
 var fileSizeLimitError = $"File exceeds size limit: {fileSizeLimit} ({fileSizeLimit >> 20}mb)";
 
 var app = builder.Build();
